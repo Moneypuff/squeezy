@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SqueezeMetrics Dashboard</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d1117;
+      color: #e6edf3;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    header h1 {
+      font-size: 1.4rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #58a6ff;
+    }
+
+    #refresh-btn {
+      background: #1f6feb;
+      color: #fff;
+      border: none;
+      padding: 8px 18px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 500;
+      transition: background 0.2s;
+    }
+    #refresh-btn:hover { background: #388bfd; }
+
+    #last-updated {
+      font-size: 0.75rem;
+      color: #8b949e;
+      align-self: flex-end;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 16px;
+    }
+
+    .card {
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 10px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .card:hover {
+      border-color: #58a6ff;
+      box-shadow: 0 0 0 3px rgba(88,166,255,0.12);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #1c2128;
+      border-bottom: 1px solid #30363d;
+    }
+
+    .ticker-label {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: #f0f6fc;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #3fb950;
+    }
+    .status-dot.error { background: #f85149; }
+    .status-dot.loading { background: #d29922; animation: pulse 1s infinite; }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    .card-img-wrap {
+      position: relative;
+      background: #0d1117;
+      min-height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .card-img-wrap img {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .card-img-wrap .overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      font-size: 0.8rem;
+      color: #8b949e;
+    }
+
+    .spinner {
+      width: 24px;
+      height: 24px;
+      border: 3px solid #30363d;
+      border-top-color: #58a6ff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .card-footer {
+      padding: 6px 14px;
+      font-size: 0.72rem;
+      color: #8b949e;
+      border-top: 1px solid #30363d;
+      background: #1c2128;
+    }
+
+    .card-footer a {
+      color: #58a6ff;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .card-footer a:hover { text-decoration: underline; }
+
+    /* Lightbox */
+    #lightbox {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 12px;
+    }
+    #lightbox.open { display: flex; }
+
+    #lightbox img {
+      max-width: 92vw;
+      max-height: 85vh;
+      border-radius: 8px;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+    }
+
+    #lightbox-label {
+      color: #f0f6fc;
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    #lightbox-close {
+      position: fixed;
+      top: 18px;
+      right: 24px;
+      background: none;
+      border: none;
+      color: #8b949e;
+      font-size: 2rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+    #lightbox-close:hover { color: #f0f6fc; }
+
+    #lightbox-link {
+      font-size: 0.75rem;
+      color: #58a6ff;
+      text-decoration: none;
+    }
+    #lightbox-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>SqueezeMetrics Dashboard</h1>
+  <div style="display:flex;align-items:center;gap:16px;">
+    <span id="last-updated"></span>
+    <button id="refresh-btn" onclick="refreshAll()">Refresh All</button>
+  </div>
+</header>
+
+<div class="grid" id="grid"></div>
+
+<!-- Lightbox -->
+<div id="lightbox" onclick="closeLightbox(event)">
+  <button id="lightbox-close" onclick="closeLightbox()">&times;</button>
+  <span id="lightbox-label"></span>
+  <img id="lightbox-img" src="" alt="" />
+  <a id="lightbox-link" href="" target="_blank" rel="noopener"></a>
+</div>
+
+<script>
+  const TICKERS = [
+    'AAPL','AMZN','DJT','FSLR','GLD','GOOG','IBIT',
+    'IWM','JPM','KWEB','META','MSFT','NVDA','QQQ',
+    'SLV','SMH','SPY','TLT','TSLA','XLE','XLF',
+    'XLI','XLK','XLP','XLU','XLV','XLY','XOM'
+  ];
+
+  function imgUrl(ticker) {
+    return `https://squeezemetrics.com/download/${ticker}.png?_=${Date.now()}`;
+  }
+
+  function createCard(ticker) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = `card-${ticker}`;
+    card.innerHTML = `
+      <div class="card-header">
+        <span class="ticker-label">${ticker}</span>
+        <span class="status-dot loading" id="dot-${ticker}"></span>
+      </div>
+      <div class="card-img-wrap" id="wrap-${ticker}">
+        <div class="overlay" id="overlay-${ticker}">
+          <div class="spinner"></div>
+          <span>Loading…</span>
+        </div>
+        <img id="img-${ticker}" style="display:none;" alt="${ticker} chart" />
+      </div>
+      <div class="card-footer" id="footer-${ticker}">
+        <a href="#" onclick="openLightbox('${ticker}');return false;">${ticker}</a>
+      </div>
+    `;
+    return card;
+  }
+
+  function loadTicker(ticker) {
+    const img   = document.getElementById(`img-${ticker}`);
+    const dot   = document.getElementById(`dot-${ticker}`);
+    const overlay = document.getElementById(`overlay-${ticker}`);
+
+    dot.className = 'status-dot loading';
+    img.style.display = 'none';
+    overlay.style.display = 'flex';
+    overlay.innerHTML = '<div class="spinner"></div><span>Loading…</span>';
+
+    img.onload = () => {
+      overlay.style.display = 'none';
+      img.style.display = 'block';
+      dot.className = 'status-dot';
+    };
+
+    img.onerror = () => {
+      overlay.innerHTML = '<span style="color:#f85149">Failed to load</span>';
+      dot.className = 'status-dot error';
+    };
+
+    img.src = imgUrl(ticker);
+  }
+
+  function refreshAll() {
+    document.getElementById('last-updated').textContent =
+      'Updated: ' + new Date().toLocaleTimeString();
+    TICKERS.forEach(loadTicker);
+  }
+
+  // Build grid
+  const grid = document.getElementById('grid');
+  TICKERS.forEach(ticker => {
+    grid.appendChild(createCard(ticker));
+    loadTicker(ticker);
+  });
+
+  document.getElementById('last-updated').textContent =
+    'Updated: ' + new Date().toLocaleTimeString();
+
+  function openLightbox(ticker) {
+    const src = document.getElementById(`img-${ticker}`).src;
+    const url = `https://squeezemetrics.com/download/${ticker}.png`;
+    document.getElementById('lightbox-label').textContent = ticker;
+    document.getElementById('lightbox-img').src = src;
+    document.getElementById('lightbox-link').href = url;
+    document.getElementById('lightbox-link').textContent = url;
+    document.getElementById('lightbox').classList.add('open');
+    document.addEventListener('keydown', onLightboxKey);
+  }
+
+  function closeLightbox(e) {
+    if (e && e.target !== document.getElementById('lightbox') &&
+        e.target !== document.getElementById('lightbox-close')) return;
+    document.getElementById('lightbox').classList.remove('open');
+    document.removeEventListener('keydown', onLightboxKey);
+  }
+
+  function onLightboxKey(e) {
+    if (e.key === 'Escape') closeLightbox();
+  }
+</script>
+</body>
+</html>
