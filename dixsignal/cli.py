@@ -49,6 +49,7 @@ def _add_common(sub):
     sub.add_argument("--cost-bps", type=float, default=0.0, help="per-side cost in bps")
     sub.add_argument("--benchmark", default="SPY")
     sub.add_argument("--csv", default=None, help="write per-name metrics to this CSV path")
+    sub.add_argument("--json", default=None, help="write results payload (for signal.html) to this path")
 
 
 def main(argv=None):
@@ -97,6 +98,12 @@ def main(argv=None):
     if a.csv and not result["per_name"].empty:
         result["per_name"].to_csv(a.csv)
         print(f"\nper-name metrics -> {a.csv}", file=sys.stderr)
+    if a.json and not result["per_name"].empty:
+        import json
+        payload = bt.to_payload(result, params, benchmark=a.benchmark)
+        with open(a.json, "w") as fh:
+            json.dump(payload, fh)
+        print(f"results payload -> {a.json}", file=sys.stderr)
     return 0
 
 

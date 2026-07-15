@@ -134,6 +134,36 @@ def backtest(dataset, params: Params = None, cost_bps=0.0, benchmark="SPY"):
     return {"per_name": per_name, "portfolio": portfolio, "equity": equity, "signals": sig}
 
 
+def to_payload(result, params: Params = None, benchmark="SPY", max_points=1500):
+    """JSON-serialisable dict for the HTML panel: equity curves + metrics + per-name
+    table. The hourly equity curve is decimated to ~`max_points` for a light payload."""
+    import numpy as _np
+    if result["per_name"].empty:
+        return {"empty": True}
+    eq = result["equity"]
+    step = max(1, len(eq) // max_points)
+    eqd = eq.iloc[::step]
+    dates = [t.strftime("%Y-%m-%d %H:%M") for t in eqd.index]
+    curves = {"portfolio": [round(float(x), 5) for x in eqd["portfolio"].values]}
+    if benchmark in eqd.columns:
+        curves[benchmark] = [round(float(x), 5) for x in eqd[benchmark].values]
+
+    def _clean(d):
+        return {k: (None if (isinstance(v, float) and _np.isnan(v)) else
+                    (round(float(v), 6) if isinstance(v, (int, float, _np.floating)) else v))
+                for k, v in d.items()}
+
+    per_name = [{"ticker": t, **_clean(row.to_dict())}
+                for t, row in result["per_name"].iterrows()]
+    meta = {}
+    if params:
+        meta = {"sma_hourly": params.sma_hourly, "sma_daily": params.sma_daily,
+                "decile_q": params.decile_q, "decile_mode": params.decile_mode,
+                "require_gate": params.require_gate}
+    return {"empty": False, "dates": dates, "curves": curves,
+            "portfolio": _clean(result["portfolio"]), "per_name": per_name, "params": meta}
+
+
 def format_report(result, params: Params = None):
     """Plain-text summary suitable for stdout."""
     if result["per_name"].empty:
