@@ -367,16 +367,21 @@ def fetch_yahoo_hourly_one(sym, start, end, session=None, retries=3, pause=0.5,
 
 
 def _drop_partial_bars(df):
-    """Drop the last bar of each trading day (the partial 15:30 ET half-hour bar) so
-    every retained bar spans a full hour."""
-    day = df.index.tz_convert(EXCHANGE_TZ).normalize()
-    is_last = day != np.roll(day.values, -1)
-    is_last[-1] = True  # final bar overall is always a session's last
-    return df[~is_last]
+    """Drop the last bar of each trading day (the partial 15:30 ET half-hour bar, and
+    today's in-progress close bar) so every retained bar spans a full hour. A bar is a
+    session's last when the NEXT bar falls on a different day (or there is no next bar)."""
+    if len(df) < 2:
+        return df.iloc[0:0]
+    day = pd.Series(df.index.tz_convert(EXCHANGE_TZ).normalize(), index=df.index)
+    keep = day.eq(day.shift(-1)).fillna(False)  # last-of-day / final bar -> False -> dropped
+    return df[keep.values]
 
 
-def hourly_lookback_start(start, end, max_days=730):
-    """Clamp `start` so the 60m request stays within Yahoo's ~730-day window."""
+def hourly_lookback_start(start, end, max_days=725):
+    """Clamp `start` so the 60m request stays within Yahoo's 730-day window. The cap is
+    725 (not 730) on purpose: Yahoo's limit is strict ("within the last 730 days"), so a
+    start exactly 730 days back is rejected 422 -- the 5-day margin absorbs that plus any
+    request-time skew, at a cost of ~5 trading days on a ~500-day window."""
     end = pd.Timestamp(end)
     floor = end - pd.Timedelta(days=max_days)
     start = pd.Timestamp(start)

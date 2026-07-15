@@ -5,3 +5,8 @@ __pycache__/
 *.tmp
 err*.txt
 out.csv
+run.log
+per_name.csv
+results_nogate.json
+.cache/
+scratchpad_*.png

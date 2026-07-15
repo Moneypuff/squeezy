@@ -390,16 +390,19 @@ function renderTable(){
   });
 }
 
-// ---- boot: try to fetch the bundled sample; fall back to a prompt ----
-fetch("dixsignal/sample_results.json").then(r=>{ if(!r.ok) throw 0; return r.json(); })
-  .then(d=>load(d, "sample_results.json"))
-  .catch(()=>{
-    document.getElementById("banner").classList.remove("hidden");
-    document.getElementById("banner").innerHTML =
-      "No results file loaded. Generate one with "
-      + "<code>python -m dixsignal.cli run --years 2 --json results.json</code> "
-      + "(or <code>demo --json</code> for a preview) and use <em>Load results…</em>.";
-  });
+// ---- boot: prefer a real results.json; fall back to the synthetic sample; then a prompt ----
+async function boot(){
+  for (const [path, name] of [["results.json","results.json"],
+                              ["dixsignal/sample_results.json","sample_results.json"]]) {
+    try { const r = await fetch(path); if(r.ok){ load(await r.json(), name); return; } } catch(e){}
+  }
+  document.getElementById("banner").classList.remove("hidden");
+  document.getElementById("banner").innerHTML =
+    "No results file loaded. Generate one with "
+    + "<code>python -m dixsignal.cli run --years 2 --json results.json</code> "
+    + "(or <code>demo --json</code> for a preview) and use <em>Load results…</em>.";
+}
+boot();
 </script>
 </body>
 </html>
