@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.dixsignal_cache/
+.cache_test/
+*.tmp
+err*.txt
+out.csv
