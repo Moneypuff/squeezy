@@ -155,7 +155,7 @@
 
   <div class="card">
     <h2>Equity curve</h2>
-    <div class="sub">Growth of $1, equal-weight pooled portfolio vs SPY buy &amp; hold — hourly bars.</div>
+    <div class="sub" id="chart-sub">Growth of $1, equal-weight pooled portfolio vs SPY buy &amp; hold.</div>
     <div class="legend" id="legend"></div>
     <div class="chart-wrap">
       <svg id="chart" viewBox="0 0 1000 430" preserveAspectRatio="xMidYMid meet"
@@ -229,10 +229,10 @@ function render(){
 
 function renderParams(){
   const p = DATA.params || {};
-  if(!Object.keys(p).length){ document.getElementById("params").textContent=""; return; }
-  const gate = p.require_gate ? `top-${Math.round((1-p.decile_q)*100)}% DIX (${p.decile_mode})` : "GATE OFF (SMA-only)";
-  document.getElementById("params").textContent =
-    `${p.sma_hourly}h SMA × ${p.sma_daily}d SMA × ${gate}`;
+  document.getElementById("params").textContent = p.label || "";
+  const sub = document.getElementById("chart-sub");
+  if(sub) sub.textContent = "Growth of $1, equal-weight pooled portfolio vs SPY buy & hold"
+    + (p.freq ? ` — ${p.freq} bars.` : ".");
 }
 
 function renderTiles(){
@@ -244,7 +244,7 @@ function renderTiles(){
      s: bench!=null ? `SPY ${fmtPct(bench)}` : ""},
     {k:"vs SPY (excess)", v: excess!=null? fmtPct(excess):"—", cls: signClass(excess), s:"portfolio − benchmark"},
     {k:"CAGR", v:fmtPct(p.cagr), cls: signClass(p.cagr)},
-    {k:"Sharpe (hourly)", v:fmtNum(p.sharpe,2)},
+    {k:"Sharpe (ann.)", v:fmtNum(p.sharpe,2)},
     {k:"Max Drawdown", v:fmtPct(p.max_drawdown), cls:"neg"},
     {k:"Avg Hit-rate", v:fmtPct(p.avg_hit_rate)},
     {k:"Avg Exposure", v:fmtPct(p.avg_exposure)},

@@ -18,7 +18,7 @@ import pandas as pd
 from . import backtest as bt
 from . import synth
 from .data import DEFAULT_CACHE_DIR, build_dataset
-from .strategy import Params
+from .strategy import ConvictionParams, Params
 
 # The 28-name dashboard universe (from squeezy/index.html).
 DEFAULT_UNIVERSE = [
@@ -29,6 +29,16 @@ DEFAULT_UNIVERSE = [
 
 
 def _params_from_args(a):
+    if a.strategy == "conviction":
+        return ConvictionParams(
+            sma_daily=a.sma_daily,
+            dix_decile=a.dix_decile,
+            dix_days=a.dix_days,
+            dix_window=a.decile_window,
+            void_closes=a.void_closes,
+            require_cross=not a.no_cross,
+            dix_hold=a.dix_hold,
+        )
     return Params(
         sma_hourly=a.sma_hourly,
         sma_daily=a.sma_daily,
@@ -40,12 +50,21 @@ def _params_from_args(a):
 
 
 def _add_common(sub):
+    sub.add_argument("--strategy", choices=["dualsma", "conviction"], default="conviction",
+                     help="dualsma = 100h/20d SMA + top-decile gate; conviction = daily 20d "
+                          "cross + DIX-decile-held setup (default)")
     sub.add_argument("--sma-hourly", type=int, default=100)
     sub.add_argument("--sma-daily", type=int, default=20)
     sub.add_argument("--decile-mode", choices=["trailing", "cross_sectional"], default="trailing")
     sub.add_argument("--decile-window", type=int, default=252)
     sub.add_argument("--decile-q", type=float, default=0.90)
-    sub.add_argument("--no-gate", action="store_true", help="disable DIX gate (SMA-only baseline)")
+    sub.add_argument("--no-gate", action="store_true", help="dualsma: disable DIX gate (SMA-only baseline)")
+    # conviction knobs
+    sub.add_argument("--dix-decile", type=float, default=0.70, help="conviction: DIX percentile floor (0.70 = 7th decile)")
+    sub.add_argument("--dix-days", type=int, default=5, help="conviction: consecutive days DIX must hold the decile")
+    sub.add_argument("--void-closes", type=int, default=2, help="conviction: consecutive closes below SMA that void the trade")
+    sub.add_argument("--no-cross", action="store_true", help="conviction: enter on any close above the SMA, not just a fresh cross")
+    sub.add_argument("--dix-hold", action="store_true", help="conviction: also exit if DIX falls back below the decile")
     sub.add_argument("--cost-bps", type=float, default=0.0, help="per-side cost in bps")
     sub.add_argument("--benchmark", default="SPY")
     sub.add_argument("--csv", default=None, help="write per-name metrics to this CSV path")

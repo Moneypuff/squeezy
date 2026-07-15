@@ -46,6 +46,41 @@ def decile_gate(d_panel, mode="trailing", **kw):
     return top_decile_gate_trailing(d_panel, **kw)
 
 
+def _consec_true_series(s):
+    """Run-length of consecutive True values ending at each row, for one boolean Series."""
+    b = s.astype(bool).astype("int64")
+    grp = (b == 0).cumsum()                 # new group id at every False (reset boundary)
+    return b.groupby(grp).cumsum()          # cumulative 1s within each all-True run
+
+
+def consecutive_true(bool_obj):
+    """Run-length of consecutive True values ending at each row (0 where False). Works on
+    a Series or (column-wise) a DataFrame."""
+    if isinstance(bool_obj, pd.Series):
+        return _consec_true_series(bool_obj)
+    return bool_obj.apply(_consec_true_series)
+
+
+def held_for(bool_frame, n):
+    """True where a condition has been continuously True for at least `n` rows (inclusive
+    of the current row) — e.g. 'DIX above the 7th decile for 5 days'."""
+    return consecutive_true(bool_frame) >= n
+
+
+def cross_above(price, level):
+    """True on the bar where `price` closes above `level` having been at/below it the prior
+    bar — a fresh upward cross ('momentum inflecting up'), not merely being above."""
+    above = price > level
+    return above & ~above.shift(1, fill_value=False)
+
+
+def two_closes_below(price, level):
+    """True where `price` has closed below `level` on this bar AND the previous one — the
+    'chop/void' condition (two consecutive closes back below the line)."""
+    below = price < level
+    return below & below.shift(1, fill_value=False)
+
+
 def align_daily_to_hourly(daily_frame, hourly_index):
     """Forward-fill a DAILY panel (date index) onto an HOURLY tz-aware index. Each hourly
     bar takes the most recent COMPLETED daily value strictly before its session, i.e. the

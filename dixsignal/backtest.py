@@ -8,7 +8,7 @@ not-yet-observed close. Flat = cash = 0 return. Costs are optional (bps per side
 import numpy as np
 import pandas as pd
 
-from .strategy import Params, build_signals
+from .strategy import ConvictionParams, Params, build_conviction_signals, build_signals
 
 
 def _years(index):
@@ -92,7 +92,12 @@ def backtest(dataset, params: Params = None, cost_bps=0.0, benchmark="SPY"):
       signals    : the raw per-ticker signal frames (for inspection/plots)
     """
     params = params or Params()
-    sig = build_signals(dataset, params)
+    if isinstance(params, ConvictionParams):
+        sig = build_conviction_signals(dataset, params)
+        price_panel = dataset["daily_close"]
+    else:
+        sig = build_signals(dataset, params)
+        price_panel = dataset["hourly_close"]
     if not sig:
         return {"per_name": pd.DataFrame(), "portfolio": {}, "equity": pd.DataFrame(), "signals": {}}
 
@@ -109,9 +114,8 @@ def backtest(dataset, params: Params = None, cost_bps=0.0, benchmark="SPY"):
     port_eq = (1.0 + port_ret).cumprod()
 
     equity = pd.DataFrame({"portfolio": port_eq})
-    hourly = dataset["hourly_close"]
-    if benchmark and hourly is not None and benchmark in hourly.columns:
-        bench_close = hourly[benchmark].reindex(port_eq.index).ffill()
+    if benchmark and price_panel is not None and benchmark in price_panel.columns:
+        bench_close = price_panel[benchmark].reindex(port_eq.index).ffill()
         bench_eq = (1.0 + bench_close.pct_change().fillna(0.0)).cumprod()
         equity[benchmark] = bench_eq
 
@@ -134,7 +138,20 @@ def backtest(dataset, params: Params = None, cost_bps=0.0, benchmark="SPY"):
     return {"per_name": per_name, "portfolio": portfolio, "equity": equity, "signals": sig}
 
 
-def to_payload(result, params: Params = None, benchmark="SPY", max_points=1500):
+def strategy_label(params):
+    """One-line human description of a strategy config, for reports and the panel."""
+    if isinstance(params, ConvictionParams):
+        entry = "cross above" if params.require_cross else "close above"
+        decile = int(round(params.dix_decile * 10))
+        hold = " + DIX-hold exit" if params.dix_hold else ""
+        return (f"conviction: {entry} {params.sma_daily}d SMA, DIX >= decile {decile} "
+                f"for {params.dix_days}d, void on {params.void_closes} closes below{hold}")
+    return (f"{params.sma_hourly}h SMA x {params.sma_daily}d SMA x "
+            f"top-{int((1 - params.decile_q) * 100)}% DIX ({params.decile_mode})"
+            + ("" if params.require_gate else "  [GATE OFF: SMA-only baseline]"))
+
+
+def to_payload(result, params=None, benchmark="SPY", max_points=1500):
     """JSON-serialisable dict for the HTML panel: equity curves + metrics + per-name
     table. The hourly equity curve is decimated to ~`max_points` for a light payload."""
     import numpy as _np
@@ -155,11 +172,8 @@ def to_payload(result, params: Params = None, benchmark="SPY", max_points=1500):
 
     per_name = [{"ticker": t, **_clean(row.to_dict())}
                 for t, row in result["per_name"].iterrows()]
-    meta = {}
-    if params:
-        meta = {"sma_hourly": params.sma_hourly, "sma_daily": params.sma_daily,
-                "decile_q": params.decile_q, "decile_mode": params.decile_mode,
-                "require_gate": params.require_gate}
+    freq = "daily" if isinstance(params, ConvictionParams) else "hourly"
+    meta = {"label": strategy_label(params), "freq": freq} if params else {}
     return {"empty": False, "dates": dates, "curves": curves,
             "portfolio": _clean(result["portfolio"]), "per_name": per_name, "params": meta}
 
@@ -171,18 +185,16 @@ def format_report(result, params: Params = None):
     p = result["portfolio"]
     lines = []
     lines.append("=" * 64)
-    lines.append("DIX + dual-SMA signal -- backtest summary")
+    lines.append("DIX signal -- backtest summary")
     if params:
-        lines.append(f"  {params.sma_hourly}h SMA  x  {params.sma_daily}d SMA  x  "
-                     f"top-{int((1-params.decile_q)*100)}% DIX ({params.decile_mode})"
-                     + ("" if params.require_gate else "  [GATE OFF: SMA-only baseline]"))
+        lines.append("  " + strategy_label(params))
     lines.append("=" * 64)
     lines.append(f"  names traded      : {p['n_names']}")
     lines.append(f"  portfolio return  : {p['total_return']*100:8.2f}%")
     if "benchmark_total_return" in p:
         lines.append(f"  SPY buy & hold    : {p['benchmark_total_return']*100:8.2f}%")
     lines.append(f"  CAGR              : {p['cagr']*100:8.2f}%")
-    lines.append(f"  Sharpe (hourly)   : {p['sharpe']:8.2f}")
+    lines.append(f"  Sharpe (ann.)     : {p['sharpe']:8.2f}")
     lines.append(f"  max drawdown      : {p['max_drawdown']*100:8.2f}%")
     lines.append(f"  avg exposure      : {p['avg_exposure']*100:8.2f}%")
     lines.append(f"  avg hit-rate      : {p['avg_hit_rate']*100:8.2f}%")
